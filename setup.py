@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='glowseeds',
-    version='0.1.0',
+    version='0.1.2',
     packages=['glowseeds'],
     url='https://github.com/TeamMacLean/glowseeds',
     license='LICENSE.txt',
@@ -11,7 +11,7 @@ setup(
     description='Counting glowing seeds',
     python_requires='>=3.7',
     install_requires=[
-        "scikit-image",
+        "scikit-image>=0.18.1",
         "pandas"
     ],
 )

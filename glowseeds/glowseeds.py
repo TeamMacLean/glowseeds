@@ -29,10 +29,15 @@ def plot(img, title="blank"):
     ax.axis('off')
     plt.show()
 
-def pixel_values(img_fname):
+def preview_pixel_values(img_fname):
     img = skimage.io.imread(img_fname)
     img = skimage.util.img_as_ubyte(skimage.color.rgb2gray(img))
-    return img.ravel()
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.hist(img.ravel(), bins=40)
+    ax.set_xlabel('Pixel intensity (0:255)')
+    ax.set_ylabel('Frequency')
+    ax.set_title('Histogram of pixel values')
+    plt.show()
 
 def watershed(img, compactness=0, min_distance=30): #binary thresholded image
     ## remove small and large objects before getting here!!!
@@ -84,10 +89,17 @@ def to_pandas(regions, bf_filename, fl_filename, ol_fname):
 
     return pd.DataFrame(data)
 
+def get_basename(bf_filename, rmsuff=False, suff=None):
+    head, tail = os.path.split(bf_filename)
+    if rmsuff:
+        return tail.replace(suff, "")
+    return os.path.splitext(tail)[0]
+
 def make_overlay_fname(dir, bf_filename):
     if dir is None:
         dir = ""
-    return os.path.join(dir, os.path.splitext(bf_filename)[0] + "_objects.jpg")
+    head, tail = os.path.split(bf_filename)
+    return os.path.join(dir, get_basename(tail) + "_objects.jpg")
 
 def do(bf_filename,fl_filename,
        disk_size = 12,
@@ -102,12 +114,45 @@ def do(bf_filename,fl_filename,
     bf, fl = load_pair(bf_filename,fl_filename)
     overlay_fname = make_overlay_fname(figure_directory, bf_filename)
     ds_img = desalt(bf, disk_size=disk_size)
-    bin = threshold(ds_img, threshold_min, threshold_max)
+    bin = threshold(ds_img, lower=threshold_min, upper=threshold_max)
     labels = watershed(bin, compactness=compactness, min_distance=min_distance)
     props = skimage.measure.regionprops(labels, intensity_image=fl)
     filtered_props = [r for r in props if is_small_and_fat(r, major_to_minor=width_to_length, min_area = min_area) ] ## make sure user can set values for small and fat
     filtered_labels = clear_filtered_labels(labels, filtered_props)
     plot_jellybeans(filtered_labels, fname= overlay_fname, title=bf_filename, bg_image=bf)
     return to_pandas(filtered_props, bf_filename, fl_filename, overlay_fname)
+
+
+def find_files(directory, bf_base="_BF.jpg", fl_base="_DSR200.jpg"):
+    bfs = [os.path.join(directory,f) for f in os.listdir(directory) if f.endswith(bf_base)]
+    fls = [os.path.join(directory,f) for f in os.listdir(directory)  if f.endswith(fl_base)]
+    df1 = pd.DataFrame({"bright_field" : bfs, "basename": [get_basename(b, rmsuff=True, suff=bf_base) for b in bfs] } )
+    df2 = pd.DataFrame({"fluorescence": fls, "basename": [get_basename(f, rmsuff=True, suff=fl_base) for f in fls]})
+    return pd.merge(df1,df2, on="basename", how='left')
+
+
+def find_and_quantify(file_df,
+       disk_size = 12,
+       threshold_min = 25,
+       threshold_max = 100,
+       compactness = 0,
+       min_distance = 30,
+       width_to_length = 2,
+       min_area = 100 * 60,
+       figure_directory  = None):
+
+    results = []
+    for bf, fl in zip(file_df['bright_field'], file_df['fluorescence']):
+        results.append( do(bf,fl,
+            disk_size=disk_size,
+            threshold_min = threshold_min,
+            threshold_max = threshold_max,
+            compactness = compactness,
+            min_distance = min_distance,
+            width_to_length = width_to_length,
+            min_area = min_area,
+            figure_directory = figure_directory)
+        )
+    return pd.concat(results, ignore_index=True)
 
 
